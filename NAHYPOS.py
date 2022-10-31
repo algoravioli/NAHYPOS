@@ -8,10 +8,11 @@ import dehb
 
 
 class NAHYPOS:
-    def __init__(self):
+    def __init__(self, EPOCHS):
         super(NAHYPOS, self).__init__()
+        self.EPOCHS = EPOCHS
 
-    def DataIngest(self, TrainCSV, TestCSV):
+    def DataIngestCSV(self, TrainCSV, TestCSV):
         # import data from csv
         TrainData = pd.read_csv(TrainCSV)
         TestData = pd.read_csv(TestCSV)
@@ -27,7 +28,35 @@ class NAHYPOS:
         TestData_x = TestData_np[:, 0:-1]
         TestData_y = TestData_np[:, -1]
 
-        return TrainData_x, TrainData_y, TestData_x, TestData_y
+        self.TrainData_x = TrainData_x
+        self.TrainData_y = TrainData_y
+        self.TestData_x = TestData_x
+        self.TestData_y = TestData_y
+        self.TrainData_np = TrainData_np
+        self.TestData_np = TestData_np
+
+    def DataIngestFTR(self, TrainFTR, TestFTR):
+        # import data from ftr
+        TrainData = pd.read_feather(TrainFTR)
+        TestData = pd.read_feather(TestFTR)
+
+        # convert data to np array
+        TrainData_np = TrainData.to_numpy()
+        TestData_np = TestData.to_numpy()
+
+        # split data into x and y
+        TrainData_x = TrainData_np[:, 0:-1]
+        TrainData_y = TrainData_np[:, -1]
+
+        TestData_x = TestData_np[:, 0:-1]
+        TestData_y = TestData_np[:, -1]
+
+        self.TrainData_x = TrainData_x
+        self.TrainData_y = TrainData_y
+        self.TestData_x = TestData_x
+        self.TestData_y = TestData_y
+        self.TrainData_np = TrainData_np
+        self.TestData_np = TestData_np
 
     def SetupOptuna(
         self,
@@ -125,43 +154,87 @@ class NAHYPOS:
             # define output layer
             model.add(tf.keras.layers.Dense(output_size, activation="ReLU"))
             # define optimizer
+            kwargs = {}
+
             optimizer = trial.suggest_categorical(
                 "optimizer", tf_optimizers
             )  # optimizers should be in this format: ["Adam", "RMSprop", "SGD"]
 
             if optimizer == "Adam":
                 optimizer = tf.keras.optimizers.Adam(
-                    learning_rate=trial.suggest_loguniform("lr", 1e-5, 1e-1)
+                    learning_rate=trial.suggest_float("lr", 1e-5, 1e-1)
                 )
             elif optimizer == "RMSprop":
                 optimizer = tf.keras.optimizers.RMSprop(
-                    learning_rate=trial.suggest_loguniform("lr", 1e-5, 1e-1)
+                    learning_rate=trial.suggest_float("lr", 1e-5, 1e-1)
+                )
+                kwargs["decay"] = trial.suggest_float("decay", 0.85, 0.99)
+                kwargs["momentum"] = trial.suggest_float(
+                    "momentum", 1e-5, 1e-1, log=True
                 )
             elif optimizer == "SGD":
                 optimizer = tf.keras.optimizers.SGD(
-                    learning_rate=trial.suggest_loguniform("lr", 1e-5, 1e-1)
+                    learning_rate=trial.suggest_float("lr", 1e-5, 1e-1)
                 )
+                kwargs["momentum"]
             elif optimizer == "Adagrad":
                 optimizer = tf.keras.optimizers.Adagrad(
-                    learning_rate=trial.suggest_loguniform("lr", 1e-5, 1e-1)
+                    learning_rate=trial.suggest_float("lr", 1e-5, 1e-1)
                 )
 
+            optimizer = getattr(tf.keras.optimizers, optimizer)(**kwargs)
+
             # compile model
-            model.compile(loss=tf_loss_fn, optimizer=optimizer, metrics=["accuracy"])
-            return model
+            # model.compile(loss=tf_loss_fn, optimizer=optimizer, metrics=["accuracy"])
+            return model, optimizer
 
-        OptunaModel = create_model(
-            trial,
-            layer_min,
-            layer_max,
-            width_min,
-            width_max,
-            layer_types,
-            output_size,
-            tf_optimizers,
-            tf_loss_fn,
-            conv_window=3,
-        )
+        # define learn function
+        def learn(model, dataset, optimizer, mode="eval"):
+            accuracy = tf.metrics.Accuracy("accuracy", dtype=tf.float32)
+            for batch, (x, y) in enumerate(dataset):
+                with tf.GradientTape() as tape:
+                    logits = model(x, training=True)
+                    loss_value = tf_loss_fn(y, logits)
 
+                if mode == "eval":
+                    accuracy(tf.argmax(logits, axis=1, output_type=tf.int64), y)
+                else:
+                    grads = tape.gradient(loss_value, model.trainable_weights)
+                    optimizer.apply_gradients(zip(grads, model.trainable_weights))
+                    if batch % 100 == 0:
+                        print("Step #%d\tLoss: %.6f" % (batch, float(loss_value)))
+
+            if mode == "eval":
+                return accuracy
+
+        def objective(trial):
+            OptunaModel, Optimizer = create_model(
+                trial,
+                layer_min,
+                layer_max,
+                width_min,
+                width_max,
+                layer_types,
+                output_size,
+                tf_optimizers,
+                tf_loss_fn,
+                conv_window=3,
+            )
+            accuracy = tf.metrics.Accuracy("accuracy", dtype=tf.float32)
+
+            # Training and Validating
+            for epoch in range(self.EPOCHS):
+                learn(OptunaModel, self.TrainData_np, Optimizer, mode="train")
+
+            accuracy = learn(OptunaModel, self.TestData_np, Optimizer, mode="eval")
+
+            return accuracy.result()
+
+        def StartOptunaStudy(self, direction):
+            self.study = optuna.create_study(direction=direction)
+            self.study.optimize(objective)
+
+
+# %%
 
 # %%
