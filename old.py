@@ -1,3 +1,6 @@
+import tensorflow as tf
+import optuna
+
 def SetupOptuna(
     self,
     trial,
