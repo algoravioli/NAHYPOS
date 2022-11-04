@@ -1,11 +1,11 @@
 import pandas as pd
 
 
-class data_ingester:
+class Data_Ingester:
     def __init__(self):
         pass
 
-    def DataIngestCSV(TrainCSV, TestCSV):
+    def DataIngestCSV(self, TrainCSV, TestCSV):
         # import data from csv
         TrainData = pd.read_csv(TrainCSV)
         TestData = pd.read_csv(TestCSV)
@@ -30,7 +30,7 @@ class data_ingester:
             TestData_np,
         )
 
-    def DataIngestFTR(TrainFTR, TestFTR):
+    def DataIngestFTR(self, TrainFTR, TestFTR):
         # import data from ftr
         TrainData = pd.read_feather(TrainFTR)
         TestData = pd.read_feather(TestFTR)
