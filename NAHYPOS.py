@@ -7,7 +7,10 @@ import optuna
 import dehb
 import optuna_misc.OptunaLayers as OptunaLayers
 from data_ingest.Data_Ingester import Data_Ingester
+
 from tqdm import tqdm
+
+# from external_libraries.FS
 
 
 class NAHYPOS:
@@ -170,6 +173,7 @@ class NAHYPOS:
             self.learn(model, optimizer, self.train_dataset, mode="train")
 
         accuracy = self.learn(model, optimizer, self.test_dataset, mode="eval")
+        assert accuracy is not None
         return accuracy.result()
 
     def run_optuna_study(self, n_trials=100):
