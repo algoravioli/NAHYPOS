@@ -10,13 +10,30 @@ from data_ingest.Data_Ingester import Data_Ingester
 
 from tqdm import tqdm
 
-# from external_libraries.FS
+from external_libraries import useFS
+
+import time
 
 
 class NAHYPOS:
-    def __init__(self, EPOCHS=100, BATCH_SIZE=100):
+    def __init__(self, EPOCHS=200, BATCH_SIZE=100, FS_DICT=None):
         self.EPOCHS = EPOCHS
         self.BATCH_SIZE = BATCH_SIZE
+
+        # set up FS
+        if FS_DICT is None:
+            FS_DICT = {"POPULATION": 10, "ITERATIONS": 10}
+
+        popln = FS_DICT["POPULATION"]
+        iters = FS_DICT["ITERATIONS"]
+        self.FSuser = useFS.useFS(
+            popln,
+            iters,
+        )
+        self.FSFunctionList = []
+        for i in range(len(dir(self.FSuser))):
+            if "run" in dir(self.FSuser)[i]:
+                self.FSFunctionList.append(dir(self.FSuser)[i])
 
     def data_ingest(self, train_data, test_data, format="CSV"):
         data_ingester = Data_Ingester()
@@ -54,6 +71,8 @@ class NAHYPOS:
         self.train_dataset = train_dataset
         self.test_dataset = test_dataset
         self.input_size = TrainData_x.shape[1]
+
+        self.FSuser.declare_dataset(TrainData_np, TestData_np)
 
         return (
             TrainData_x,
@@ -131,7 +150,7 @@ class NAHYPOS:
         accuracy = tf.metrics.Accuracy("accuracy", dtype=tf.float32)
 
         for batch, (x, y) in enumerate(dataset):
-            print(batch, end="\r")
+            # print(batch, end="\r")
             plt.close()
             with tf.GradientTape() as tape:
                 logits = model(x, training=(mode == "train"))
@@ -169,7 +188,7 @@ class NAHYPOS:
         optimizer = self.create_optimizer(trial)
 
         for _ in tqdm(range(self.EPOCHS)):
-            print(self.EPOCHS, end="\r")
+            # print(self.EPOCHS, end="\r")
             self.learn(model, optimizer, self.train_dataset, mode="train")
 
         accuracy = self.learn(model, optimizer, self.test_dataset, mode="eval")
@@ -187,30 +206,34 @@ class NAHYPOS:
 
         print("  Value: ", trial.value)
 
-        print("  Params: ")
+        # print("  Params: ")
+
+        OutputDict = {
+            "NumberOfFinishedTraisl": len(study.trials),
+            "BestTrial": study.best_trial,
+            "BestValue": trial.value,
+        }
         for key, value in trial.params.items():
-            print("    {}: {}".format(key, value))
+            # print("    {}: {}".format(key, value))
+            OutputDict[key] = value
 
-        return study
+        return study, OutputDict
 
+    def run_FS_study(self, feature_set_name):
+        Results = dict()  # use dataframe instead of dict and directly export to CSV
+        for i in range(len(self.FSFunctionList)):
+            AlgorithmName = self.FSFunctionList[i]
+            fmdl, opts, sf = getattr(self.FSuser, AlgorithmName)()
+            acc, number_of_features = self.FSuser.optimize(
+                fmdl, opts, sf, AlgorithmName
+            )
+            Results["acc"] = acc
+            Results["number_of_features"] = number_of_features
+            Results["AlgorithmName"] = AlgorithmName
+        Results_df = pd.DataFrame(Results, index=[0])
+        epoch_time = int(time.time())
+        Results_df.to_csv(
+            f"Results_{epoch_time}_{feature_set_name}_{AlgorithmName}.csv"
+        )
 
-# %%
-
-# Searcher = NAHYPOS()
-# train_data = "./Data/roberta/Adresso_Test_TFRoberta.ftr"
-# test_data = "./Data/roberta/Addresso_Test_TFRoberta.ftr"
-# Searcher.data_ingest(train_data, test_data, format="FTR")
-
-# optuna_dict = {
-#     "min_layer_size": 16,
-#     "max_layer_size": 256,
-#     "min_layer_number": 1,
-#     "max_layer_number": 3,
-#     "allowable_layer_types": ["Dense", "Conv1D", "Conv2D"],
-#     "output_size": 2,
-#     "optimizers": ["Adam", "RMSprop", "SGD"],
-# }
-# Searcher.optuna_settings(optuna_dict)
-# Searcher.run_optuna_study(n_trials=100)
-
-#%%
+        return Results
