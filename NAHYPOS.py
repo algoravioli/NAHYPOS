@@ -230,10 +230,10 @@ class NAHYPOS:
             Results["acc"] = acc
             Results["number_of_features"] = number_of_features
             Results["AlgorithmName"] = AlgorithmName
-        Results_df = pd.DataFrame(Results, index=[0])
-        epoch_time = int(time.time())
-        Results_df.to_csv(
-            f"Results_{epoch_time}_{feature_set_name}_{AlgorithmName}.csv"
-        )
+            Results_df = pd.DataFrame(Results, index=[0])
+            epoch_time = int(time.time())
+            Results_df.to_csv(
+                f"Results_{epoch_time}_{feature_set_name}_{AlgorithmName}.csv"
+            )
 
         return Results

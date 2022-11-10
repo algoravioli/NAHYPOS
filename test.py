@@ -7,7 +7,7 @@ import pandas as pd
 dataset_list = ["bert", "distilbert", "roberta", "xlnet"]
 for i in range(len(dataset_list)):
 
-    FS_DICT = {"POPULATION": 50, "ITERATIONS": 30}
+    FS_DICT = {"POPULATION": 10, "ITERATIONS": 5}
     Searcher = NAHYPOS(FS_DICT=FS_DICT)
     train_data: str = (
         rf"C:\Users\Chris\Desktop\GitFiles\NAHYPOS\Data\{dataset_list[i]}\Train.ftr"
@@ -42,9 +42,12 @@ for i in range(len(dataset_list)):
         ],
     }
     Searcher.optuna_settings(optuna_dict)
-    study, OutputDict = Searcher.run_optuna_study(n_trials=100)
-    OptunaResults_df = pd.DataFrame(OutputDict, index=[0])
-    OptunaResults_df.to_csv(f"OptunaResults_{dataset_list[i]}.csv", index=False)
+    if i == 0 or i == 1:
+        pass
+    else:
+        study, OutputDict = Searcher.run_optuna_study(n_trials=100)
+        OptunaResults_df = pd.DataFrame(OutputDict, index=[0])
+        OptunaResults_df.to_csv(f"OptunaResults_{dataset_list[i]}.csv", index=False)
 
     Results = Searcher.run_FS_study(dataset_list[i])
 
